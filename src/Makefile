@@ -7,6 +7,6 @@ test: 9cc
 				./test.sh
 
 clean: 
-			rm -f 9cc *.exe *~ tmp*
+			rm -f 9cc *.exe* *~ tmp*
 
 .PHONY: test clean
