@@ -1,1 +1,5 @@
-./research
+research/
+*.exe
+*.s
+*.code
+tmp*
