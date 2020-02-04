@@ -47,7 +47,7 @@ void error_at(char* loc, char* fmt, ...) {
 }
 
 bool consume(char *op) {
-  if (token->kind != TK_RESERVED || strlen(op) != token->len, memcmp(token->str, op, token->len)){
+  if (token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len)){
     return false;
   }
   token = token->next;
@@ -62,7 +62,7 @@ void expect(char* op) {
 
 int expect_number() {
   if (token->kind != TK_NUM)
-    error_at(token->str, "数ではありません");
+    error_at(token->str, "数ではありません : %s", token->kind);
   int val = token->val;
   token = token->next;
   return val;
@@ -91,6 +91,7 @@ Token *tokenize(char *p) {
   Token *cur = &head;
 
   while (*p) {
+
     // 空白文字をスキップ
     if (isspace(*p)) {
       p++;
@@ -98,19 +99,22 @@ Token *tokenize(char *p) {
     }
 
     if(startswith(p, "==") || startswith(p, "!=" ) || startswith(p, "<=") || startswith(p, ">=")) {
-      cur = new_token(TK_RESERVED, cur, p++, 2);
+      cur = new_token(TK_RESERVED, cur, p, 2);
       p += 2;
       continue;
     }
 
-    if (strchr("+-*/()", *p)) {
-      cur = new_token(TK_RESERVED, cur, p++, 1);
+    if (strchr("+-*/()<>", *p)) {
+      cur = new_token(TK_RESERVED, cur, p, 1);
+      p++;
       continue;
     }
 
     if (isdigit(*p)) {
       cur = new_token(TK_NUM, cur, p, 0);
+      char *q = p;
       cur->val = strtol(p, &p, 10);
+      cur->len = p-q;
       continue;
     }
 
@@ -159,7 +163,7 @@ Node* new_node(NodeKind kind, Node* lhs, Node* rhs) {
 }
 
 Node* expr();
-
+// primary = "(" expr ")" | num
 Node* primary() {
   if(consume("(")) {
     Node* node = expr();
@@ -168,7 +172,7 @@ Node* primary() {
   }
   return new_node_num(expect_number());
 }
-
+// unary = ("+" | "-")? primary | primary
 Node* unary() {
   if(consume("+")) {
     return primary();
@@ -178,7 +182,7 @@ Node* unary() {
   }
   return primary();
 }
-
+// mul = unary ("*" unary | "/" unary)*
 Node* mul() {
   Node* node = unary();
 
@@ -194,7 +198,7 @@ Node* mul() {
     }
   }
 }
-
+// add = mul ("+" mul | "-" mul)*
 Node* add() {
   Node* node = mul();
 
@@ -210,7 +214,7 @@ Node* add() {
     }
   }
 }
-
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* relational() {
   Node* node = add();
 
@@ -233,6 +237,7 @@ Node* relational() {
   }
 }
 
+// equality = relational ("==" relational | "!=" relational)*
 Node* equality() {
   Node* node = relational();
 
@@ -241,7 +246,7 @@ Node* equality() {
       node = new_node(ND_EQ, node, relational());
     }
     else if(consume("!=")) {
-      node = new_node(ND_NE, node, relatioanl());
+      node = new_node(ND_NE, node, relational());
     }
     else {
       return node;
@@ -249,6 +254,7 @@ Node* equality() {
   }
 }
 
+// expr = equality
 Node* expr() {
   return equality();
 }
@@ -278,8 +284,27 @@ void gen(Node* node) {
     case ND_DIV:
       printf("  cqo\n");
       printf("  idiv rdi\n");
+      break;
     case ND_EQ:
-      
+      printf("  cmp rax, rdi\n");
+      printf("  sete al\n");
+      printf("  movzb rax, al\n");
+      break;
+    case ND_NE:
+      printf("  cmp rax, rdi\n");
+      printf("  setne al\n");
+      printf("  movzb rax, al\n");
+      break;
+    case ND_LT:
+      printf("  cmp rax, rdi\n");
+      printf("  setl al\n");
+      printf("  movzb rax, al\n");
+      break;
+    case ND_LE:
+      printf("  cmp rax, rdi\n");
+      printf("  setle al\n");
+      printf("  movzb rax, al\n");
+      break;
   }
   printf("  push rax\n");
 }
@@ -289,7 +314,7 @@ int main(int argc, char** argv) {
     error("引数の個数が正しくありません");
     return 1;
   } 
-
+  
   user_input = argv[1];
   token = tokenize(user_input);
   Node* node = expr();
